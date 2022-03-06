@@ -3,5 +3,6 @@ charset-normalizer==2.0.12
 idna==3.3
 numpy==1.22.2
 opencv-python==4.5.5.62
+PyYAML==6.0
 requests==2.27.1
 urllib3==1.26.8

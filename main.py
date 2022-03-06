@@ -1,5 +1,5 @@
-import argparse
 import json
+import yaml
 
 from calibrator import Calibrator
 from tracker import *
@@ -8,24 +8,36 @@ from post_processing import add_post_processing
 
 
 def parse_args():
-    ap = argparse.ArgumentParser()
+    with open('settings.yaml', 'r') as stream:
+        args = yaml.safe_load(stream)
 
-    ap.add_argument('-i', '--capture_type', help='["webcam", "esp32"]', default='webcam')
-    ap.add_argument('-t', '--tracking_type', help='["gaussian", "hsv"]', default='gaussian')
-    # ap.add_argument('-c', '--run_calibrator', action='store_true', default=True)
-    ap.add_argument('-d', '--frame_delay', help='frame delay in seconds', type=float, default=0)
-    ap.add_argument('-u', '--image_url', help='ESP32 image URL')
+    if args['frame_stack'] == 'vertical':
+        args['frame_stack_func'] = np.vstack
+    elif args['frame_stack'] == 'horizontal':
+        args['frame_stack_func'] = np.hstack
 
-    args = vars(ap.parse_args())
+    image_url = '{0}://{1}/{2}'.format(
+        args['esp32_server']['scheme'],
+        args['esp32_server']['host'],
+        args['esp32_server']['image_endpoint'],
+    )
 
-    if args['capture_type'] == 'esp32' and args['image_url'] is None:
-        raise Exception('Must include "--image_url" argument when "--input_type" is "esp32"')
+    control_url = '{0}://{1}/{2}'.format(
+        args['esp32_server']['scheme'],
+        args['esp32_server']['host'],
+        args['esp32_server']['control_endpoint'],
+    )
+
+    args['image_url'] = image_url
+    args['control_url'] = control_url
+    args['frame_delay'] = 1 / args['frames_per_second']
 
     return args
 
 
-def run_calibrator(capture_type, tracking_type, frame_delay, **kwargs):
-    calibrator = Calibrator(f'{tracking_type} calibrator')
+def run_calibrator(capture_type, laser_tracking_type, frame_delay, **kwargs):
+    frame_stack_func = kwargs.get('frame_stack_func')
+    calibrator = Calibrator(f'{laser_tracking_type.upper()} calibrator', frame_stack_func)
 
     options = {}
     capture_cv2_frame_func = None
@@ -50,7 +62,7 @@ def run_calibrator(capture_type, tracking_type, frame_delay, **kwargs):
     return calibrator
 
 
-def run_laser_tracking(capture_type, tracking_type, frame_delay, calibrator, **kwargs):
+def run_laser_tracking(capture_type, laser_tracking_type, frame_delay, calibrator, **kwargs):
     options = {}
     get_cv2_frame_func = None
     process_frame_func = None
@@ -66,17 +78,19 @@ def run_laser_tracking(capture_type, tracking_type, frame_delay, calibrator, **k
 
     kwargs.update(options)
 
-    if tracking_type == 'gaussian':
+    if laser_tracking_type == 'gaussian':
+        calibrator.display_threshold_calibrator()
+        lower_threshold, upper_threshold = calibrator.get_thresholds()
         calibrator.display_gaussian_blur_calibrator()
         radius = calibrator.get_gaussian_blur_radius()
         process_frame_func = gaussian_processing
         screen_name = 'Gaussian Laser Tracking'
         options = {
             'radius': radius,
-            'lower_threshold': 220,
-            'upper_threshold': 255
+            'lower_threshold': lower_threshold,
+            'upper_threshold': upper_threshold
         }
-    elif tracking_type == 'hsv':
+    elif laser_tracking_type == 'hsv':
         calibrator.display_hsv_calibrator()
         low_laser_hsv, high_laser_hsv = calibrator.get_hsv_boundaries()
         process_frame_func = hsv_processing
@@ -89,20 +103,22 @@ def run_laser_tracking(capture_type, tracking_type, frame_delay, calibrator, **k
         raise ValueError('Invalid "tracking_type" parameter')
 
     kwargs.update(options)
+    control_url = kwargs.get('control_url')
+    frame_stack_func = kwargs.get('frame_stack_func')
 
     while True:
-        min_loc, max_loc, output = track_laser(get_cv2_frame_func, process_frame_func, **kwargs)
+        min_loc, max_loc, output, processed_output = track_laser(get_cv2_frame_func, process_frame_func, **kwargs)
         output = add_post_processing(output, max_loc)
-        cv2.imshow(screen_name, output)
-        if kwargs["image_url"] is not None:
-            send_control_data(max_loc, output)
+        cv2.imshow(screen_name, frame_stack_func([output, processed_output]))
+        if capture_type == 'esp32':
+            send_control_data(max_loc, output, control_url)
         if check_close_cv2_window():
             cv2.destroyWindow(screen_name)
             break
         time.sleep(frame_delay)
 
 
-def send_control_data(max_loc, output):
+def send_control_data(max_loc, output, control_url):
     height, width, _ = output.shape
     left, top = max_loc
     data = {
@@ -116,23 +132,27 @@ def send_control_data(max_loc, output):
         },
         'in_center': False
     }
-    requests.post('http://172.20.10.4/control', data=json.dumps(data))
+    requests.post(control_url, data=json.dumps(data))
 
 
 def main():
     args = parse_args()
-    kwargs = {'image_url': args['image_url']}
+    kwargs = {
+        'image_url': args['image_url'],
+        'control_url': args['control_url'],
+        'frame_stack_func': args['frame_stack_func']
+    }
 
     calibrator = run_calibrator(
         args['capture_type'],
-        args['tracking_type'],
+        args['laser_tracking_type'],
         args['frame_delay'],
         **kwargs
     )
 
     run_laser_tracking(
         args['capture_type'],
-        args['tracking_type'],
+        args['laser_tracking_type'],
         args['frame_delay'],
         calibrator,
         **kwargs
