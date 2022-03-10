@@ -1,0 +1,54 @@
+capture_type: webcam
+frames_per_second: 20
+frame_stack_orientation: vertical
+esp32_server:
+  scheme: http
+  host: 10.0.0.194
+  image_endpoint: capture
+  control_endpoint: control
+laser:
+  tracking_type: gaussian
+  calibrate: true
+  default_values:
+    lower_hsv: [0, 0, 0]
+    upper_hsv: [255, 255, 255]
+    lower_threshold: 0
+    upper_threshold: 255
+  post_processing:
+    center_lines:
+      color: [255, 0, 255]
+      thickness: 1
+    control_arrow:
+      color: [0, 255, 255]
+      thickness: 1
+    coordinates:
+      color: [0, 255, 255]
+      thickness: 1
+      font_scale: 0.5
+      offset: 20
+    direction_text:
+      color: [0, 255, 255]
+      thickness: 1
+      font_scale: 0.5
+      offset: -10
+  center_width_percentage: .1
+landmine:
+  tracking_type: hsv_contour
+  calibrate: true
+  default_values:
+    lower_hsv: [0, 0, 0]
+    upper_hsv: [255, 255, 255]
+    lower_threshold: 0
+    upper_threshold: 255
+  post_processing:
+    outline:
+      color: [0, 255, 0]
+      thickness: 1
+    marker:
+      color: [255, 255, 0]
+      thickness: 5
+    text:
+      color: [255, 255, 0]
+      thickness: 2
+      font_scale: 0.5
+      offset: -10

@@ -1,161 +1,184 @@
 import json
 import yaml
+import time
+import requests
+
+import cv2
+import numpy as np
+
+import tracker as tracker
+import image_capture as ic
 
 from calibrator import Calibrator
-from tracker import *
-from image_capture import *
 from post_processing import add_post_processing
 
 
-def parse_args():
-    with open('settings.yaml', 'r') as stream:
-        args = yaml.safe_load(stream)
+def parse_options():
+    with open('options.yaml', 'r') as stream:
+        options = yaml.safe_load(stream)
 
-    if args['frame_stack'] == 'vertical':
-        args['frame_stack_func'] = np.vstack
-    elif args['frame_stack'] == 'horizontal':
-        args['frame_stack_func'] = np.hstack
-
-    image_url = '{0}://{1}/{2}'.format(
-        args['esp32_server']['scheme'],
-        args['esp32_server']['host'],
-        args['esp32_server']['image_endpoint'],
+    options['image_url'] = '{0}://{1}/{2}'.format(
+        options['esp32_server']['scheme'],
+        options['esp32_server']['host'],
+        options['esp32_server']['image_endpoint'],
     )
 
-    control_url = '{0}://{1}/{2}'.format(
-        args['esp32_server']['scheme'],
-        args['esp32_server']['host'],
-        args['esp32_server']['control_endpoint'],
+    options['control_url'] = '{0}://{1}/{2}'.format(
+        options['esp32_server']['scheme'],
+        options['esp32_server']['host'],
+        options['esp32_server']['control_endpoint'],
     )
 
-    args['image_url'] = image_url
-    args['control_url'] = control_url
-    args['frame_delay'] = 1 / args['frames_per_second']
+    orientation = options['frame_stack_orientation']
+    options['frame_stack_func'] = np.vstack if orientation == 'vertical' else np.hstack
+    options['frame_delay'] = 1 / options['frames_per_second']
 
-    return args
+    return options
 
 
-def run_calibrator(capture_type, laser_tracking_type, frame_delay, **kwargs):
-    frame_stack_func = kwargs.get('frame_stack_func')
-    calibrator = Calibrator(f'{laser_tracking_type.upper()} calibrator', frame_stack_func)
-
-    options = {}
+def create_calibrator(capture_type, frame_stack_func, frame_delay, **options):
+    capture_options = {}
     capture_cv2_frame_func = None
 
     if capture_type == 'webcam':
-        capture_cv2_frame_func = capture_webcam_cv2_frame_from_stream
-        options = {
+        capture_cv2_frame_func = ic.capture_webcam_cv2_frame_from_stream
+        capture_options = {
             'screen_name': 'Webcam Frame Capture',
-            'video_capture': cv2.VideoCapture(0)
+            'video_capture': cv2.VideoCapture(0, cv2.CAP_DSHOW)
         }
     elif capture_type == 'esp32':
-        capture_cv2_frame_func = capture_esp32_cv2_frame_from_stream
-        options = {
+        capture_cv2_frame_func = ic.capture_esp32_cv2_frame_from_stream
+        capture_options = {
             'screen_name': 'ESP32 CAM Frame Capture',
-            'image_url': kwargs.get('image_url')
+            'image_url': options.get('image_url')
         }
     else:
-        raise ValueError('Invalid "capture_type" parameter')
+        raise ValueError('Invalid "capture_type" option')
 
-    kwargs.update(options)
-    calibrator.capture_frame(capture_cv2_frame_func, frame_delay, **kwargs)
-    return calibrator
+    cv2_frame = capture_cv2_frame_func(frame_delay, **capture_options)
+    return Calibrator(cv2_frame, frame_stack_func)
 
 
-def run_laser_tracking(capture_type, laser_tracking_type, frame_delay, calibrator, **kwargs):
-    options = {}
-    get_cv2_frame_func = None
-    process_frame_func = None
-    screen_name = None
+def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
+                frame_delay, calibrator, **options):
+    capture_options = {}
+    capture_cv2_frame_func = None
 
     if capture_type == 'webcam':
-        get_cv2_frame_func = capture_webcam_cv2_frame
-        options = {'video_capture': cv2.VideoCapture(0)}
+        capture_cv2_frame_func = ic.capture_webcam_cv2_frame
+        capture_options = {
+            'video_capture': cv2.VideoCapture(0, cv2.CAP_DSHOW)
+        }
     elif capture_type == 'esp32':
-        get_cv2_frame_func = capture_esp32_cv2_frame
+        capture_cv2_frame_func = ic.capture_esp32_cv2_frame
+        capture_options = {
+            'image_url': options['image_url']
+        }
     else:
-        raise ValueError('Invalid "capture_type" parameter')
+        raise ValueError('Invalid "capture_type" option')
 
-    kwargs.update(options)
+    laser_tracking_options = {}
+    laser_tracking_func = None
 
     if laser_tracking_type == 'gaussian':
-        calibrator.display_threshold_calibrator()
-        lower_threshold, upper_threshold = calibrator.get_thresholds()
-        calibrator.display_gaussian_blur_calibrator()
-        radius = calibrator.get_gaussian_blur_radius()
-        process_frame_func = gaussian_processing
-        screen_name = 'Gaussian Laser Tracking'
-        options = {
-            'radius': radius,
+        lower_threshold, upper_threshold = calibrator.calibrate_threshold()
+        gaussian_blur_radius = calibrator.calibrate_gaussian_blur()
+        laser_tracking_func = tracker.gaussian_tracking
+        laser_tracking_options = {
+            'screen_name': 'Gaussian Laser Tracking',
+            'gaussian_blur_radius': gaussian_blur_radius,
             'lower_threshold': lower_threshold,
             'upper_threshold': upper_threshold
         }
     elif laser_tracking_type == 'hsv':
-        calibrator.display_hsv_calibrator()
-        low_laser_hsv, high_laser_hsv = calibrator.get_hsv_boundaries()
-        process_frame_func = hsv_processing
-        screen_name = 'HSV Laser Tracking'
-        options = {
-            'low_hsv': low_laser_hsv,
-            'high_hsv': high_laser_hsv
+        lower_hsv, upper_hsv = calibrator.calibrate_hsv()
+        laser_tracking_func = tracker.hsv_tracking
+        laser_tracking_options = {
+            'screen_name': 'HSV Laser Tracking',
+            'lower_hsv': lower_hsv,
+            'upper_hsv': upper_hsv
         }
     else:
-        raise ValueError('Invalid "tracking_type" parameter')
+        raise ValueError('Invalid "laser.tracking_type" option')
 
-    kwargs.update(options)
-    control_url = kwargs.get('control_url')
-    frame_stack_func = kwargs.get('frame_stack_func')
+    landmine_tracking_options = {}
+    landmine_tracking_func = None
+
+    if landmine_tracking_type == 'hsv_contour':
+        lower_hsv, upper_hsv = calibrator.calibrate_hsv()
+        landmine_tracking_func = tracker.hsv_contour_tracking
+        landmine_tracking_options = {
+            'lower_hsv': lower_hsv,
+            'upper_hsv': upper_hsv,
+            'outline_color': tuple(options['landmine']['post_processing']['outline']['color']),
+            'thickness': options['landmine']['post_processing']['outline']['thickness']
+        }
+    else:
+        raise ValueError('Invalid landmine.tracking_type option')
 
     while True:
-        min_loc, max_loc, output, processed_output = track_laser(get_cv2_frame_func, process_frame_func, **kwargs)
-        output = add_post_processing(output, max_loc)
-        cv2.imshow(screen_name, frame_stack_func([output, processed_output]))
+        frame = capture_cv2_frame_func(**capture_options)
+        max_loc, laser_output, processed_laser_output = tracker.track_object_from_frame(
+            frame,
+            laser_tracking_func,
+            **laser_tracking_options
+        )
+        coords, landmine_output, processed_landmine_output = tracker.track_objects_from_frame(
+            frame,
+            landmine_tracking_func,
+            laser_output,
+            **landmine_tracking_options
+        )
+        data = compile_data(frame, max_loc, coords, **options)
+
+        output = add_post_processing(landmine_output, data, **options)
+        cv2.imshow(laser_tracking_options['screen_name'], output)
+
         if capture_type == 'esp32':
-            send_control_data(max_loc, output, control_url)
-        if check_close_cv2_window():
-            cv2.destroyWindow(screen_name)
+            requests.post(options['control_url'], data=json.dumps(data))
+        if ic.check_close_cv2_window():
             break
         time.sleep(frame_delay)
 
 
-def send_control_data(max_loc, output, control_url):
-    height, width, _ = output.shape
-    left, top = max_loc
-    data = {
+def compile_data(frame, max_loc, landmine_coords, **options):
+    height, width, _ = frame.shape
+    laser_pos_left, laser_pos_top = max_loc
+
+    center_width = options['laser']['center_width_percentage'] * width
+    center_left_line = int((width / 2) - (center_width / 2))
+    center_right_line = int((width / 2) + (center_width / 2))
+
+    return {
         'frame': {
             'width': width,
-            'height': height
+            'height': height,
         },
-        'position': {
-            'left': left,
-            'top': top
+        'center': {
+            'width': center_width,
+            'left_line': center_left_line,
+            'right_line': center_right_line
         },
-        'in_center': False
+        'laser': {
+            'position': {
+                'left': laser_pos_left,
+                'top': laser_pos_top
+            }
+        },
+        'landmine': {
+            'positions': landmine_coords
+        }
     }
-    requests.post(control_url, data=json.dumps(data))
 
 
 def main():
-    args = parse_args()
-    kwargs = {
-        'image_url': args['image_url'],
-        'control_url': args['control_url'],
-        'frame_stack_func': args['frame_stack_func']
-    }
-
-    calibrator = run_calibrator(
-        args['capture_type'],
-        args['laser_tracking_type'],
-        args['frame_delay'],
-        **kwargs
-    )
-
-    run_laser_tracking(
-        args['capture_type'],
-        args['laser_tracking_type'],
-        args['frame_delay'],
-        calibrator,
-        **kwargs
+    options = parse_options()
+    calibrator = create_calibrator(**options)
+    run_tracker(
+        laser_tracking_type=options['laser']['tracking_type'],
+        landmine_tracking_type=options['landmine']['tracking_type'],
+        calibrator=calibrator,
+        **options
     )
 
 

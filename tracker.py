@@ -1,31 +1,38 @@
 import cv2
+import imutils
 import numpy as np
 
 
-def track_laser(get_cv2_frame_func, process_frame_func, **kwargs):
-    """
-    Tracks a laser pointer and returns the frame with the laser pointer circled.
-    :param get_cv2_frame_func: A function that returns a cv2 frame (e.g. cv2.imread(...))
-    :param process_frame_func: A function that processes a cv2 frame and returns the laser
-    pointer min_loc, max_loc, and frame with the laser pointer circled.
-    :param kwargs: Additional optional arguments for get_cv2_frame_func and process_frame_func
-    :return: The min_loc, max_loc of the laser pointer.
-    """
-    frame = get_cv2_frame_func(**kwargs)
-    min_loc, max_loc, output, processed_output = process_frame_func(frame, **kwargs)
-    return min_loc, max_loc, output, processed_output
+def track_object(capture_cv2_frame_func, tracking_func, **options):
+    frame = capture_cv2_frame_func(**options)
+    return track_object_from_frame(frame, tracking_func, **options)
 
 
-def gaussian_processing(frame, **kwargs):
-    radius = kwargs.get('radius')
-    lower_threshold = kwargs.get('lower_threshold')
-    upper_threshold = kwargs.get('upper_threshold')
+def track_object_from_frame(frame, tracking_func, prev_frame=None, **tracking_options):
+    max_loc, output, processed_output = tracking_func(frame, **tracking_options)
+    return max_loc, output, processed_output
+
+
+def track_objects(capture_cv2_frame_func, tracking_func, **options):
+    frame = capture_cv2_frame_func(**options)
+    return track_objects_from_frame(frame, tracking_func, **options)
+
+
+def track_objects_from_frame(frame, tracking_func, prev_frame=None, **tracking_options):
+    coords, output, processed_output = tracking_func(frame, prev_frame, **tracking_options)
+    return coords, output, processed_output
+
+
+def gaussian_tracking(frame, prev_frame=None, **tracking_options):
+    gaussian_blur_radius = tracking_options.get('gaussian_blur_radius')
+    lower_threshold = tracking_options.get('lower_threshold')
+    upper_threshold = tracking_options.get('upper_threshold')
 
     gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
 
     blurred_frame = cv2.GaussianBlur(
         gray_frame,
-        (radius, radius),
+        (gaussian_blur_radius, gaussian_blur_radius),
         0
     )
     _, thresh_inv = cv2.threshold(
@@ -36,24 +43,66 @@ def gaussian_processing(frame, **kwargs):
     )
 
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(thresh_inv)
-    cv2.circle(frame, max_loc, radius, (255, 0, 0), 2)
+    cv2.circle(frame, max_loc, gaussian_blur_radius, (255, 0, 0), 2)
 
     processed_output = cv2.bitwise_and(gray_frame, thresh_inv)
     processed_output = cv2.cvtColor(processed_output, cv2.COLOR_GRAY2BGR)
 
-    return min_loc, max_loc, frame, processed_output
+    return max_loc, frame, processed_output
 
 
-def hsv_processing(frame, **kwargs):
-    low_hsv = np.array(kwargs['low_hsv'])
-    high_hsv = np.array(kwargs['high_hsv'])
+def hsv_tracking(frame, prev_frame=None, **tracking_options):
+    lower_hsv = tracking_options.get('lower_hsv')
+    upper_hsv = tracking_options.get('upper_hsv')
 
-    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-    mask = cv2.inRange(hsv_frame, low_hsv, high_hsv)
+    mask = get_hsv_mask(frame, lower_hsv, upper_hsv)
 
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(mask)
     cv2.circle(frame, max_loc, 2, (255, 0, 0), 2)
 
     processed_output = cv2.bitwise_and(frame, frame, mask=mask)
 
-    return min_loc, max_loc, frame, processed_output
+    return max_loc, frame, processed_output
+
+
+def hsv_contour_tracking(frame, prev_frame=None, **tracking_options):
+    output = frame.copy() if prev_frame is None else prev_frame
+
+    lower_hsv = tracking_options.get('lower_hsv')
+    upper_hsv = tracking_options.get('upper_hsv')
+
+    mask = get_hsv_mask(frame, lower_hsv, upper_hsv)
+    processed_output = cv2.bitwise_and(frame, frame, mask=mask)
+
+    contours = cv2.findContours(mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+    contours = imutils.grab_contours(contours)
+    cv2.drawContours(
+        output,
+        contours,
+        -1,
+        tracking_options.get('outline_color'),
+        thickness=tracking_options.get('thickness'),
+        lineType=cv2.LINE_AA
+    )
+
+    coords = []
+
+    for contour in contours:
+        moments = cv2.moments(contour)
+        if moments['m00'] != 0:
+            x = int(moments['m10'] / moments['m00'])
+            y = int(moments['m01'] / moments['m00'])
+            cv2.circle(output, (x, y), 3, (255, 255, 255), -1)
+            coords.append({'left': x, 'top': y})
+
+    return coords, output, processed_output
+
+
+def get_hsv_mask(frame, lower_hsv, upper_hsv):
+    lower_hsv = np.array(lower_hsv)
+    upper_hsv = np.array(upper_hsv)
+
+    hsv_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+    mask = cv2.inRange(hsv_frame, lower_hsv, upper_hsv)
+
+    return mask

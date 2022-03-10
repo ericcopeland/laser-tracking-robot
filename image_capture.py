@@ -10,9 +10,9 @@ class ESP32CAMImageDownloadError(Exception):
         super().__init__(self.message)
 
 
-def capture_webcam_cv2_frame_from_stream(frame_delay, **kwargs):
-    screen_name = kwargs.pop('screen_name')
-    capture = kwargs.get('video_capture')
+def capture_webcam_cv2_frame_from_stream(frame_delay, **capture_options):
+    screen_name = capture_options.pop('screen_name')
+    capture = capture_options.get('video_capture')
 
     while True:
         _, frame = capture.read()
