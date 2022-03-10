@@ -25,15 +25,15 @@ def capture_webcam_cv2_frame_from_stream(frame_delay, **capture_options):
         time.sleep(frame_delay)
 
 
-def capture_webcam_cv2_frame(**kwargs):
-    capture = kwargs.get('video_capture')
+def capture_webcam_cv2_frame(**capture_options):
+    capture = capture_options.get('video_capture')
     _, frame = capture.read()
     return frame
 
 
-def capture_esp32_cv2_frame_from_stream(frame_delay, **kwargs):
-    screen_name = kwargs.pop('screen_name')
-    image_url = kwargs.get('image_url')
+def capture_esp32_cv2_frame_from_stream(frame_delay, **capture_options):
+    screen_name = capture_options.pop('screen_name')
+    image_url = capture_options.get('image_url')
 
     while True:
         response = requests.get(image_url, stream=True)
@@ -53,8 +53,8 @@ def capture_esp32_cv2_frame_from_stream(frame_delay, **kwargs):
         time.sleep(frame_delay)
 
 
-def capture_esp32_cv2_frame(**kwargs):
-    image_url = kwargs.get('image_url')
+def capture_esp32_cv2_frame(**capture_options):
+    image_url = capture_options.get('image_url')
     response = requests.get(image_url, stream=True)
 
     if response.ok:
