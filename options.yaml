@@ -1,9 +1,9 @@
-capture_type: webcam
-frames_per_second: 20
+capture_type: esp32
+frames_per_second: 15
 frame_stack_orientation: vertical
 esp32_server:
   scheme: http
-  host: 10.0.0.194
+  host: 172.20.10.4
   image_endpoint: capture
   control_endpoint: control
 laser:
@@ -31,7 +31,7 @@ laser:
       thickness: 1
       font_scale: 0.5
       offset: -10
-  center_width_percentage: .1
+  center_width_percentage: .2
 landmine:
   tracking_type: hsv_contour
   calibrate: true

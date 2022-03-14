@@ -43,7 +43,7 @@ def gaussian_tracking(frame, prev_frame=None, **tracking_options):
     )
 
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(thresh_inv)
-    cv2.circle(frame, max_loc, gaussian_blur_radius, (255, 0, 0), 2)
+    cv2.circle(frame, max_loc, gaussian_blur_radius, (255, 0, 255), 2)
 
     processed_output = cv2.bitwise_and(gray_frame, thresh_inv)
     processed_output = cv2.cvtColor(processed_output, cv2.COLOR_GRAY2BGR)

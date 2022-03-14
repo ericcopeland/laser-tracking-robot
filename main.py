@@ -44,7 +44,7 @@ def create_calibrator(capture_type, frame_stack_func, frame_delay, **options):
         capture_cv2_frame_func = ic.capture_webcam_cv2_frame_from_stream
         capture_options = {
             'screen_name': 'Webcam Frame Capture',
-            'video_capture': cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            'video_capture': cv2.VideoCapture(0)
         }
     elif capture_type == 'esp32':
         capture_cv2_frame_func = ic.capture_esp32_cv2_frame_from_stream
@@ -67,7 +67,7 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
     if capture_type == 'webcam':
         capture_cv2_frame_func = ic.capture_webcam_cv2_frame
         capture_options = {
-            'video_capture': cv2.VideoCapture(0, cv2.CAP_DSHOW)
+            'video_capture': cv2.VideoCapture(0)
         }
     elif capture_type == 'esp32':
         capture_cv2_frame_func = ic.capture_esp32_cv2_frame
@@ -135,6 +135,7 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
         cv2.imshow(laser_tracking_options['screen_name'], output)
 
         if capture_type == 'esp32':
+            data.pop('landmine')
             requests.post(options['control_url'], data=json.dumps(data))
         if ic.check_close_cv2_window():
             break
@@ -145,9 +146,13 @@ def compile_data(frame, max_loc, landmine_coords, **options):
     height, width, _ = frame.shape
     laser_pos_left, laser_pos_top = max_loc
 
+    center = width / 2
     center_width = options['laser']['center_width_percentage'] * width
-    center_left_line = int((width / 2) - (center_width / 2))
-    center_right_line = int((width / 2) + (center_width / 2))
+    center_left_line = int(center - (center_width / 2))
+    center_right_line = int(center + (center_width / 2))
+
+    landmine_coords.sort(key=lambda l: (height - l['top'], abs(center - l['left'])))
+    nearest_landmine = landmine_coords[0] if landmine_coords else {'left': 0, 'top': 0}
 
     return {
         'frame': {
@@ -163,6 +168,12 @@ def compile_data(frame, max_loc, landmine_coords, **options):
             'position': {
                 'left': laser_pos_left,
                 'top': laser_pos_top
+            }
+        },
+        'nearest_landmine': {
+            'position': {
+                'left': nearest_landmine['left'],
+                'top': nearest_landmine['top']
             }
         },
         'landmine': {
