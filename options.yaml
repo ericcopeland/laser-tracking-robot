@@ -1,4 +1,4 @@
-capture_type: esp32
+capture_type: webcam
 frames_per_second: 15
 frame_stack_orientation: vertical
 esp32_server:
@@ -7,7 +7,7 @@ esp32_server:
   image_endpoint: capture
   control_endpoint: control
 laser:
-  tracking_type: gaussian
+  tracking_type: hsv
   calibrate: true
   default_values:
     lower_hsv: [0, 0, 0]

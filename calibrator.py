@@ -40,17 +40,17 @@ class ThresholdCalibratorData:
 
 class Calibrator:
     def __init__(self, cv2_frame, frame_stack_func):
-        self.hsv_data = HSVCalibratorData(
+        self._hsv_data = HSVCalibratorData(
             hsv_frame=cv2.cvtColor(cv2_frame, cv2.COLOR_BGR2HSV),
             lower_hsv=[0, 0, 0],
             upper_hsv=[255, 255, 255]
         )
-        self.gaussian_data = GaussianCalibratorData(
+        self._gaussian_data = GaussianCalibratorData(
             gray_frame=cv2.cvtColor(cv2_frame, cv2.COLOR_BGR2GRAY),
             gaussian_blur_radius=1
         )
-        self.threshold_data = ThresholdCalibratorData(
-            threshold_frame=cv2.cvtColor(self.gaussian_data.gray_frame, cv2.COLOR_GRAY2BGR),
+        self._threshold_data = ThresholdCalibratorData(
+            threshold_frame=cv2.cvtColor(self._gaussian_data.gray_frame, cv2.COLOR_GRAY2BGR),
             lower_threshold=0,
             upper_threshold=255
         )
@@ -110,11 +110,17 @@ class Calibrator:
         cv2.destroyWindow(self._screen_name)
         cv2.destroyWindow(self._control_screen_name)
 
-        return self.hsv_data.lower_hsv, self.hsv_data.upper_hsv
+        lower_hsv = self._hsv_data.lower_hsv.copy()
+        upper_hsv = self._hsv_data.upper_hsv.copy()
+
+        self._hsv_data.lower_hsv = [0, 0, 0]
+        self._hsv_data.upper_hsv = [255, 255, 255]
+
+        return lower_hsv, upper_hsv
 
     def _update_hsv(self, update_value: int, update_type: UpdateType):
-        lower_hsv = self.hsv_data.lower_hsv
-        upper_hsv = self.hsv_data.upper_hsv
+        lower_hsv = self._hsv_data.lower_hsv
+        upper_hsv = self._hsv_data.upper_hsv
 
         if update_type == UpdateType.HUE_LOW:
             lower_hsv[0] = update_value
@@ -129,12 +135,12 @@ class Calibrator:
         elif update_type == UpdateType.VAL_HIGH:
             upper_hsv[2] = update_value
 
-        mask = cv2.inRange(self.hsv_data.hsv_frame, np.array(lower_hsv), np.array(upper_hsv))
+        mask = cv2.inRange(self._hsv_data.hsv_frame, np.array(lower_hsv), np.array(upper_hsv))
         output = cv2.bitwise_and(self._frame, self._frame, mask=mask)
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, output]))
 
     def calibrate_threshold(self):
-        threshold_frame = self.threshold_data.threshold_frame
+        threshold_frame = self._threshold_data.threshold_frame
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, threshold_frame]))
         cv2.namedWindow(self._control_screen_name)
 
@@ -150,20 +156,26 @@ class Calibrator:
         cv2.destroyWindow(self._screen_name)
         cv2.destroyWindow(self._control_screen_name)
 
-        return self.threshold_data.lower_threshold, self.threshold_data.upper_threshold
+        lower_threshold = self._threshold_data.lower_threshold.copy()
+        upper_threshold = self._threshold_data.upper_threshold.copy()
+
+        self._threshold_data.lower_threshold = 0
+        self._threshold_data.upper_threshold = 255
+
+        return lower_threshold, upper_threshold
 
     def _update_threshold(self, update_value: int, update_type: UpdateType):
         if update_type == UpdateType.MIN_THRESHOLD:
-            self.threshold_data.lower_threshold = update_value
+            self._threshold_data.lower_threshold = update_value
         elif update_type == UpdateType.MAX_THRESHOLD:
-            self.threshold_data.upper_threshold = update_value
+            self._threshold_data.upper_threshold = update_value
 
-        threshold_frame = self.threshold_data.threshold_frame
+        threshold_frame = self._threshold_data.threshold_frame
 
         _, threshold_frame_temp = cv2.threshold(
             threshold_frame,
-            self.threshold_data.lower_threshold,
-            self.threshold_data.upper_threshold,
+            self._threshold_data.lower_threshold,
+            self._threshold_data.upper_threshold,
             cv2.THRESH_BINARY
         )
 
@@ -171,7 +183,7 @@ class Calibrator:
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, output]))
 
     def calibrate_gaussian_blur(self):
-        threshold_frame = self.threshold_data.threshold_frame
+        threshold_frame = self._threshold_data.threshold_frame
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, threshold_frame]))
         cv2.namedWindow(self._control_screen_name)
 
@@ -187,16 +199,19 @@ class Calibrator:
         cv2.destroyWindow(self._screen_name)
         cv2.destroyWindow(self._control_screen_name)
 
-        return self.gaussian_data.gaussian_blur_radius
+        gaussian_blur_radius = self._gaussian_data.gaussian_blur_radius.copy()
+        self._gaussian_data.gaussian_blur_radius = 1
+
+        return gaussian_blur_radius
 
     def _update_gaussian_blur(self, update_value: int, update_type: UpdateType):
         if update_value % 2 == 0:
             return
         elif update_type == UpdateType.GAUSSIAN_BLUR:
-            self.gaussian_data.gaussian_blur_radius = update_value
+            self._gaussian_data.gaussian_blur_radius = update_value
 
         temp_frame = self._frame.copy()
-        blurred_frame = cv2.GaussianBlur(self.gaussian_data.gray_frame, (update_value, update_value), 0)
+        blurred_frame = cv2.GaussianBlur(self._gaussian_data.gray_frame, (update_value, update_value), 0)
 
         min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(blurred_frame)
         cv2.circle(temp_frame, max_loc, update_value, (255, 0, 0), 2)
