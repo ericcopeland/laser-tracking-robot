@@ -16,6 +16,7 @@ class UpdateType(Enum):
     GAUSSIAN_BLUR = 6
     MIN_THRESHOLD = 7
     MAX_THRESHOLD = 8
+    Y_CROP = 9
 
 
 @dataclass
@@ -38,6 +39,12 @@ class ThresholdCalibratorData:
     upper_threshold: int
 
 
+@dataclass
+class CropCalibratorData:
+    cropped_frame: Any
+    y_crop: int
+
+
 class Calibrator:
     def __init__(self, cv2_frame, frame_stack_func):
         self._hsv_data = HSVCalibratorData(
@@ -53,6 +60,10 @@ class Calibrator:
             threshold_frame=cv2.cvtColor(self._gaussian_data.gray_frame, cv2.COLOR_GRAY2BGR),
             lower_threshold=0,
             upper_threshold=255
+        )
+        self._crop_data = CropCalibratorData(
+            cropped_frame=cv2_frame.copy(),
+            y_crop=0
         )
         self._frame = cv2_frame
         self._frame_stack_func = frame_stack_func
@@ -220,13 +231,48 @@ class Calibrator:
         output = cv2.cvtColor(blurred_frame, cv2.COLOR_GRAY2BGR)
         cv2.imshow(self._screen_name, self._frame_stack_func([temp_frame, output]))
 
+    def crop_image(self):
+        cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, self._frame]))
+        cv2.namedWindow(self._control_screen_name)
+
+        height, width, _ = self._frame.shape
+
+        cv2.createTrackbar(
+            'CROP_Y',
+            self._control_screen_name,
+            0,
+            height,
+            lambda val: self._update_crop(val, UpdateType.Y_CROP)
+        )
+
+        cv2.waitKey(0)
+        cv2.destroyWindow(self._screen_name)
+        cv2.destroyWindow(self._control_screen_name)
+
+        y_crop = self._crop_data.y_crop
+        self._crop_data.y_crop = 0
+
+        return y_crop
+
+    def _update_crop(self, update_value: int, update_type: UpdateType):
+        if update_type == UpdateType.Y_CROP:
+            self._crop_data.y_crop = update_value
+
+        height, width, _ = self._frame.shape
+
+        output = self._frame[self._crop_data.y_crop:height, 0:width]
+        cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, output]))
+
 
 def main():
-    capture = cv2.VideoCapture(0, cv2.CAP_DSHOW)
+    capture = cv2.VideoCapture(0)
     _, frame = capture.read()
     capture.release()
 
     calibrator = Calibrator(frame, np.vstack)
+
+    y_crop = calibrator.crop_image()
+    print(f'y_crop={y_crop}')
 
     lower_hsv, upper_hsv = calibrator.calibrate_hsv()
     print(f'lower_hsv={lower_hsv}')
