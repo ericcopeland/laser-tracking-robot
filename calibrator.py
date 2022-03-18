@@ -156,8 +156,8 @@ class Calibrator:
         cv2.destroyWindow(self._screen_name)
         cv2.destroyWindow(self._control_screen_name)
 
-        lower_threshold = self._threshold_data.lower_threshold.copy()
-        upper_threshold = self._threshold_data.upper_threshold.copy()
+        lower_threshold = self._threshold_data.lower_threshold
+        upper_threshold = self._threshold_data.upper_threshold
 
         self._threshold_data.lower_threshold = 0
         self._threshold_data.upper_threshold = 255
@@ -199,7 +199,7 @@ class Calibrator:
         cv2.destroyWindow(self._screen_name)
         cv2.destroyWindow(self._control_screen_name)
 
-        gaussian_blur_radius = self._gaussian_data.gaussian_blur_radius.copy()
+        gaussian_blur_radius = self._gaussian_data.gaussian_blur_radius
         self._gaussian_data.gaussian_blur_radius = 1
 
         return gaussian_blur_radius
