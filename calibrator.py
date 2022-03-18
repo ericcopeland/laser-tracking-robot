@@ -68,9 +68,11 @@ class Calibrator:
         self._frame = cv2_frame
         self._frame_stack_func = frame_stack_func
         self._screen_name = 'Calibrator'
-        self._control_screen_name = f'{self._screen_name} controls'
+        self._control_screen_name = None
 
-    def calibrate_hsv(self):
+    def calibrate_hsv(self, screen_name):
+        self._control_screen_name = f'{screen_name} Controls'
+
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, self._frame]))
         cv2.namedWindow(self._control_screen_name)
 
@@ -150,7 +152,9 @@ class Calibrator:
         output = cv2.bitwise_and(self._frame, self._frame, mask=mask)
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, output]))
 
-    def calibrate_threshold(self):
+    def calibrate_threshold(self, screen_name):
+        self._control_screen_name = f'{screen_name} Controls'
+
         threshold_frame = self._threshold_data.threshold_frame
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, threshold_frame]))
         cv2.namedWindow(self._control_screen_name)
@@ -193,7 +197,9 @@ class Calibrator:
         output = cv2.bitwise_and(threshold_frame, threshold_frame_temp)
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, output]))
 
-    def calibrate_gaussian_blur(self):
+    def calibrate_gaussian_blur(self, screen_name):
+        self._control_screen_name = f'{screen_name} Controls'
+
         threshold_frame = self._threshold_data.threshold_frame
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, threshold_frame]))
         cv2.namedWindow(self._control_screen_name)
@@ -231,7 +237,9 @@ class Calibrator:
         output = cv2.cvtColor(blurred_frame, cv2.COLOR_GRAY2BGR)
         cv2.imshow(self._screen_name, self._frame_stack_func([temp_frame, output]))
 
-    def crop_image(self):
+    def crop_image(self, screen_name):
+        self._control_screen_name = f'{screen_name} Controls'
+
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, self._frame]))
         cv2.namedWindow(self._control_screen_name)
 
@@ -251,6 +259,7 @@ class Calibrator:
 
         y_crop = self._crop_data.y_crop
         self._crop_data.y_crop = 0
+        self._update_frames(self._frame[y_crop:height, 0:width])
 
         return y_crop
 
@@ -263,6 +272,12 @@ class Calibrator:
         output = self._frame[self._crop_data.y_crop:height, 0:width]
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, output]))
 
+    def _update_frames(self, updated_frame):
+        self._frame = updated_frame
+        self._hsv_data.hsv_frame = cv2.cvtColor(updated_frame, cv2.COLOR_BGR2HSV)
+        self._gaussian_data.gray_frame = cv2.cvtColor(updated_frame, cv2.COLOR_BGR2GRAY)
+        self._threshold_data.threshold_frame = cv2.cvtColor(self._gaussian_data.gray_frame, cv2.COLOR_GRAY2BGR)
+
 
 def main():
     capture = cv2.VideoCapture(0)
@@ -271,17 +286,17 @@ def main():
 
     calibrator = Calibrator(frame, np.vstack)
 
-    y_crop = calibrator.crop_image()
+    y_crop = calibrator.crop_image('Crop')
     print(f'y_crop={y_crop}')
 
-    lower_hsv, upper_hsv = calibrator.calibrate_hsv()
+    lower_hsv, upper_hsv = calibrator.calibrate_hsv('HSV')
     print(f'lower_hsv={lower_hsv}')
     print(f'upper_hsv={upper_hsv}')
 
-    lower_threshold, _ = calibrator.calibrate_threshold()
+    lower_threshold, _ = calibrator.calibrate_threshold('Threshold')
     print(f'lower_threshold={lower_threshold}')
 
-    gaussian_blur_radius = calibrator.calibrate_gaussian_blur()
+    gaussian_blur_radius = calibrator.calibrate_gaussian_blur('Gaussian Blur')
     print(f'gaussian_blur_radius={gaussian_blur_radius}')
 
 

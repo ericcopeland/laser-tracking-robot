@@ -31,7 +31,6 @@ def parse_options():
 
     orientation = options['frame_stack_orientation']
     options['frame_stack_func'] = np.vstack if orientation == 'vertical' else np.hstack
-    options['frame_delay'] = 1 / options['frames_per_second']
 
     return options
 
@@ -60,7 +59,7 @@ def create_calibrator(capture_type, frame_stack_func, frame_delay, **options):
 
 
 def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
-                frame_delay, calibrator, **options):
+                frame_delay, calibrator, y_crop, **options):
     capture_options = {}
     capture_cv2_frame_func = None
 
@@ -81,8 +80,8 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
     laser_tracking_func = None
 
     if laser_tracking_type == 'gaussian':
-        lower_threshold, upper_threshold = calibrator.calibrate_threshold()
-        gaussian_blur_radius = calibrator.calibrate_gaussian_blur()
+        lower_threshold, upper_threshold = calibrator.calibrate_threshold('Laser Gaussian')
+        gaussian_blur_radius = calibrator.calibrate_gaussian_blur('Laser Gaussian')
         laser_tracking_func = tracker.gaussian_tracking
         laser_tracking_options = {
             'screen_name': 'Gaussian Laser Tracking',
@@ -91,7 +90,7 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
             'upper_threshold': upper_threshold
         }
     elif laser_tracking_type == 'hsv':
-        lower_hsv, upper_hsv = calibrator.calibrate_hsv()
+        lower_hsv, upper_hsv = calibrator.calibrate_hsv('Laser HSV')
         laser_tracking_func = tracker.hsv_tracking
         laser_tracking_options = {
             'screen_name': 'HSV Laser Tracking',
@@ -105,7 +104,7 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
     landmine_tracking_func = None
 
     if landmine_tracking_type == 'hsv_contour':
-        lower_hsv, upper_hsv = calibrator.calibrate_hsv()
+        lower_hsv, upper_hsv = calibrator.calibrate_hsv('Landmine HSV')
         landmine_tracking_func = tracker.hsv_contour_tracking
         landmine_tracking_options = {
             'lower_hsv': lower_hsv,
@@ -118,6 +117,9 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
 
     while True:
         frame = capture_cv2_frame_func(**capture_options)
+        height, width, _ = frame.shape
+        frame = frame[y_crop:height, 0:width]
+
         max_loc, laser_output, processed_laser_output = tracker.track_object_from_frame(
             frame,
             laser_tracking_func,
@@ -129,8 +131,8 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
             laser_output,
             **landmine_tracking_options
         )
-        data = compile_data(frame, max_loc, coords, **options)
 
+        data = compile_data(frame, max_loc, coords, **options)
         output = add_post_processing(landmine_output, data, **options)
         cv2.imshow(laser_tracking_options['screen_name'], output)
 
@@ -184,11 +186,15 @@ def compile_data(frame, max_loc, landmine_coords, **options):
 
 def main():
     options = parse_options()
+
     calibrator = create_calibrator(**options)
+    y_crop = calibrator.crop_image('Crop')
+
     run_tracker(
         laser_tracking_type=options['laser']['tracking_type'],
         landmine_tracking_type=options['landmine']['tracking_type'],
         calibrator=calibrator,
+        y_crop=y_crop,
         **options
     )
 
