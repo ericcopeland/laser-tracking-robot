@@ -43,7 +43,9 @@ def gaussian_tracking(frame, prev_frame=None, **tracking_options):
     )
 
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(thresh_inv)
-    cv2.circle(frame, max_loc, gaussian_blur_radius, (255, 0, 255), 2)
+
+    if max_loc != (0, 0):
+        cv2.circle(frame, max_loc, gaussian_blur_radius, (255, 0, 255), 2)
 
     processed_output = cv2.bitwise_and(gray_frame, thresh_inv)
     processed_output = cv2.cvtColor(processed_output, cv2.COLOR_GRAY2BGR)
@@ -58,7 +60,9 @@ def hsv_tracking(frame, prev_frame=None, **tracking_options):
     mask = get_hsv_mask(frame, lower_hsv, upper_hsv)
 
     min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(mask)
-    cv2.circle(frame, max_loc, 2, (255, 0, 0), 2)
+
+    if max_loc != (0, 0):
+        cv2.circle(frame, max_loc, 2, (255, 0, 0), 2)
 
     processed_output = cv2.bitwise_and(frame, frame, mask=mask)
 

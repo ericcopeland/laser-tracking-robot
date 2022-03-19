@@ -89,7 +89,7 @@ def add_landmine_indicators(frame, data, **options):
         y_pos = position['top']
         cv2.putText(
             frame,
-            'LM',
+            text_options['content'],
             (x_pos, y_pos + text_options['offset']),
             cv2.FONT_HERSHEY_SIMPLEX,
             text_options['font_scale'],

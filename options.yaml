@@ -52,3 +52,4 @@ landmine:
       thickness: 2
       font_scale: 0.5
       offset: -10
+      content: null
