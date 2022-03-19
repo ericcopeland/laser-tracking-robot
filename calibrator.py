@@ -16,7 +16,8 @@ class UpdateType(Enum):
     GAUSSIAN_BLUR = 6
     MIN_THRESHOLD = 7
     MAX_THRESHOLD = 8
-    Y_CROP = 9
+    CROP_TOP = 9
+    CROP_BOT = 10
 
 
 @dataclass
@@ -42,7 +43,8 @@ class ThresholdCalibratorData:
 @dataclass
 class CropCalibratorData:
     cropped_frame: Any
-    y_crop: int
+    crop_top: int
+    crop_bot: int
 
 
 class Calibrator:
@@ -63,7 +65,8 @@ class Calibrator:
         )
         self._crop_data = CropCalibratorData(
             cropped_frame=cv2_frame.copy(),
-            y_crop=0
+            crop_top=0,
+            crop_bot=0
         )
         self._frame = cv2_frame
         self._frame_stack_func = frame_stack_func
@@ -246,30 +249,46 @@ class Calibrator:
         height, width, _ = self._frame.shape
 
         cv2.createTrackbar(
-            'CROP_Y',
+            'TOP',
             self._control_screen_name,
             0,
             height,
-            lambda val: self._update_crop(val, UpdateType.Y_CROP)
+            lambda val: self._update_crop(val, UpdateType.CROP_TOP)
+        )
+        cv2.createTrackbar(
+            'BOT',
+            self._control_screen_name,
+            0,
+            height,
+            lambda val: self._update_crop(val, UpdateType.CROP_BOT)
         )
 
         cv2.waitKey(0)
         cv2.destroyWindow(self._screen_name)
         cv2.destroyWindow(self._control_screen_name)
 
-        y_crop = self._crop_data.y_crop
-        self._crop_data.y_crop = 0
-        self._update_frames(self._frame[y_crop:height, 0:width])
+        crop_top = self._crop_data.crop_top
+        crop_bot = self._crop_data.crop_bot
+        self._crop_data.crop_top = 0
+        self._crop_data.crop_bot = 0
+        self._update_frames(self._frame[crop_top:height-crop_bot, 0:width])
 
-        return y_crop
+        return crop_top, crop_bot
 
     def _update_crop(self, update_value: int, update_type: UpdateType):
-        if update_type == UpdateType.Y_CROP:
-            self._crop_data.y_crop = update_value
-
         height, width, _ = self._frame.shape
 
-        output = self._frame[self._crop_data.y_crop:height, 0:width]
+        crop_top = self._crop_data.crop_top
+        crop_bot = self._crop_data.crop_bot
+
+        if update_type == UpdateType.CROP_TOP and update_value < height - crop_bot:
+            self._crop_data.crop_top = update_value
+            crop_top = update_value
+        elif update_type == UpdateType.CROP_BOT and update_value < height - crop_top:
+            self._crop_data.crop_bot = update_value
+            crop_bot = update_value
+
+        output = self._frame[crop_top:height-crop_bot, 0:width]
         cv2.imshow(self._screen_name, self._frame_stack_func([self._frame, output]))
 
     def _update_frames(self, updated_frame):
@@ -286,8 +305,9 @@ def main():
 
     calibrator = Calibrator(frame, np.vstack)
 
-    y_crop = calibrator.crop_image('Crop')
-    print(f'y_crop={y_crop}')
+    crop_top, crop_bot = calibrator.crop_image('Crop')
+    print(f'crop_top={crop_top}')
+    print(f'crop_bot={crop_bot}')
 
     lower_hsv, upper_hsv = calibrator.calibrate_hsv('HSV')
     print(f'lower_hsv={lower_hsv}')

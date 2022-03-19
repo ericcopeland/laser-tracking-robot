@@ -59,7 +59,9 @@ def create_calibrator(capture_type, frame_stack_func, frame_delay, **options):
 
 
 def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
-                frame_delay, calibrator, y_crop, **options):
+                frame_delay, calibrator, **options):
+    crop_top, crop_bot = calibrator.crop_image('Crop')
+
     capture_options = {}
     capture_cv2_frame_func = None
 
@@ -118,7 +120,7 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
     while True:
         frame = capture_cv2_frame_func(**capture_options)
         height, width, _ = frame.shape
-        frame = frame[y_crop:height, 0:width]
+        frame = frame[crop_top:height-crop_bot, 0:width]
 
         max_loc, laser_output, processed_laser_output = tracker.track_object_from_frame(
             frame,
@@ -186,15 +188,11 @@ def compile_data(frame, max_loc, landmine_coords, **options):
 
 def main():
     options = parse_options()
-
     calibrator = create_calibrator(**options)
-    y_crop = calibrator.crop_image('Crop')
-
     run_tracker(
         laser_tracking_type=options['laser']['tracking_type'],
         landmine_tracking_type=options['landmine']['tracking_type'],
         calibrator=calibrator,
-        y_crop=y_crop,
         **options
     )
 
