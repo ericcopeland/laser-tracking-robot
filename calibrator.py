@@ -132,6 +132,9 @@ class Calibrator:
         self._hsv_data.lower_hsv = [0, 0, 0]
         self._hsv_data.upper_hsv = [255, 255, 255]
 
+        print(lower_hsv)
+        print(upper_hsv)
+
         return lower_hsv, upper_hsv
 
     def _update_hsv(self, update_value: int, update_type: UpdateType):

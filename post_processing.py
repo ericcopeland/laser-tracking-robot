@@ -100,8 +100,28 @@ def add_landmine_indicators(frame, data, **options):
     return frame
 
 
+def add_landmine_stop_line(frame, data, **options):
+    line_color = options['landmine']['post_processing']['stop_line']['color']
+    line_thickness = options['landmine']['post_processing']['stop_line']['thickness']
+
+    stop_distance_percentage = options['landmine']['stop_distance_percentage']
+    height, width, _ = frame.shape
+    stop_distance = int(height - stop_distance_percentage * height)
+
+    cv2.line(
+        frame,
+        (0, stop_distance),
+        (width, stop_distance),
+        line_color,
+        line_thickness
+    )
+
+    return frame
+
+
 def add_post_processing(frame, data, **options):
     frame = add_landmine_indicators(frame, data, **options)
+    frame = add_landmine_stop_line(frame, data, **options)
     frame = add_tracking_field_lines(frame, data, **options)
     frame = add_tracking_directions(frame, data, **options)
 

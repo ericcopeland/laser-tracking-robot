@@ -118,6 +118,7 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
         raise ValueError('Invalid landmine.tracking_type option')
 
     while True:
+        start_time = time.time()
         frame = capture_cv2_frame_func(**capture_options)
         height, width, _ = frame.shape
         frame = frame[crop_top:height-crop_bot, 0:width]
@@ -138,11 +139,16 @@ def run_tracker(capture_type, laser_tracking_type, landmine_tracking_type,
         output = add_post_processing(landmine_output, data, **options)
         cv2.imshow(laser_tracking_options['screen_name'], output)
 
+        time_ms = None
+
         if capture_type == 'esp32':
             data.pop('landmine')
-            requests.post(options['control_url'], data=json.dumps(data))
+            response = requests.post(options['control_url'], data=json.dumps(data))
+            print(response.text)
+            #time_ms = response.json()['time_ms']
         if ic.check_close_cv2_window():
             break
+        #print(f'{time_ms}\t{time.time() - start_time}')
         time.sleep(frame_delay)
 
 
@@ -157,6 +163,7 @@ def compile_data(frame, max_loc, landmine_coords, **options):
 
     landmine_coords.sort(key=lambda l: (height - l['top'], abs(center - l['left'])))
     nearest_landmine = landmine_coords[0] if landmine_coords else {'left': 0, 'top': 0}
+    stop_distance = int(height - options['landmine']['stop_distance_percentage'] * height)
 
     return {
         'frame': {
@@ -178,7 +185,8 @@ def compile_data(frame, max_loc, landmine_coords, **options):
             'position': {
                 'left': nearest_landmine['left'],
                 'top': nearest_landmine['top']
-            }
+            },
+            'stop_distance': stop_distance
         },
         'landmine': {
             'positions': landmine_coords

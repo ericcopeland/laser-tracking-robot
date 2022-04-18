@@ -1,10 +1,10 @@
-capture_type: webcam
-frame_delay: 0.05
+capture_type: esp32
+frame_delay: 0
 frame_stack_orientation: vertical
 esp32_server:
   scheme: http
-  host: 172.20.10.4
-  image_endpoint: capture
+  host: 172.20.10.6
+  image_endpoint: jpg
   control_endpoint: control
 laser:
   tracking_type: gaussian
@@ -31,10 +31,11 @@ laser:
       thickness: 1
       font_scale: 0.5
       offset: -10
-  center_width_percentage: .2
+  center_width_percentage: .25
 landmine:
   tracking_type: hsv_contour
   calibrate: true
+  stop_distance_percentage: .90
   default_values:
     lower_hsv: [0, 0, 0]
     upper_hsv: [255, 255, 255]
@@ -52,4 +53,7 @@ landmine:
       thickness: 2
       font_scale: 0.5
       offset: -10
-      content: null
+      content: LM
+    stop_line:
+      color: [0, 255, 255]
+      thickness: 1
